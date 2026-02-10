@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Wake scheduler binary
+wake_scheduler
