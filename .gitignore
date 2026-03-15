@@ -1,7 +1,60 @@
-.env
-*.docx
-*.pdf
+# Python
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Entorno virtual
 venv/
+env/
+.venv/
+.env
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Muestras de malware (NUNCA subir al repo)
+samples/suspicious/*.exe
+samples/suspicious/*.dll
+samples/suspicious/*.bin
+samples/suspicious/*.doc
+samples/suspicious/*.pdf
+samples/*.exe
+samples/*.dll
+
+# Dumps de memoria (pueden ser grandes y sensibles)
+*.dmp
+*.raw
+*.vmem
+dumps/
+
+# Capturas de red
+*.pcap
+*.pcapng
+
+# Informes generados
+reports/
+*.json
+
+# YARA compilado
+*.yrc
+
+# Temporales
+*.tmp
+*.bak
+tmp/
