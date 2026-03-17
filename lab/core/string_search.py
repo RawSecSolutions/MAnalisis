@@ -382,6 +382,93 @@ class AhoCorasickSearcher:
             patterns_searched = len(self._patterns),
         )
 
+    def search_file_chunked(
+        self,
+        file_path: str,
+        deduplicate: bool = True,
+        chunk_size_mb: int = 64,
+    ) -> StringSearchReport:
+        """
+        Lee el fichero en bloques y ejecuta la búsqueda Aho-Corasick
+        sobre cada bloque con solapamiento para no perder coincidencias
+        que caigan en la frontera entre chunks.
+
+        Parámetros
+        ----------
+        chunk_size_mb : tamaño de cada bloque de lectura (MB).
+        """
+        from pathlib import Path
+
+        if not self._built:
+            self.build()
+
+        path       = Path(file_path)
+        total_size = path.stat().st_size
+        chunk_size = chunk_size_mb * 1024 * 1024
+
+        # El solapamiento debe cubrir el patrón más largo para no
+        # perder coincidencias en la frontera entre chunks.
+        max_pat_len = max(len(p.encode("latin-1", errors="replace"))
+                         for p, _, _ in self._patterns) if self._patterns else 0
+        overlap     = max_pat_len + self.context_bytes
+
+        all_matches: list[StringMatch] = []
+        processed   = 0
+
+        with open(path, "rb") as fh:
+            while processed < total_size:
+                # Retroceder `overlap` bytes para cubrir la frontera,
+                # excepto en el primer chunk.
+                read_start = max(0, processed - overlap)
+                fh.seek(read_start)
+                to_read = chunk_size + (processed - read_start)
+                chunk   = fh.read(to_read)
+
+                if not chunk:
+                    break
+
+                chunk_matches = self._search_bytes(chunk, file_path)
+
+                # Ajustar offsets al offset absoluto del fichero y
+                # descartar matches del solapamiento ya procesado.
+                base_offset   = read_start
+                frontier      = processed - read_start  # inicio de datos nuevos
+
+                for m in chunk_matches:
+                    abs_offset = m.offset + base_offset
+                    # Solo aceptar coincidencias que empiezan en la zona nueva
+                    # (o en el primer chunk donde todo es nuevo).
+                    if processed == 0 or m.offset >= frontier:
+                        all_matches.append(
+                            StringMatch(
+                                pattern  = m.pattern,
+                                category = m.category,
+                                severity = m.severity,
+                                offset   = abs_offset,
+                                context  = m.context,
+                            )
+                        )
+
+                processed = read_start + len(chunk)
+
+        if deduplicate:
+            seen   = set()
+            unique = []
+            for m in all_matches:
+                if m.pattern not in seen:
+                    seen.add(m.pattern)
+                    unique.append(m)
+            all_matches = unique
+
+        all_matches.sort(key=lambda m: (-m.severity, m.offset))
+
+        return StringSearchReport(
+            file_path         = str(file_path),
+            total_size        = total_size,
+            matches           = all_matches,
+            patterns_searched = len(self._patterns),
+        )
+
     def search_file(
         self,
         file_path: str,
@@ -391,18 +478,20 @@ class AhoCorasickSearcher:
         """
         Lee el fichero y ejecuta la búsqueda.
 
+        Para ficheros pequeños (≤ max_size_mb) carga todo en memoria.
+        Para ficheros grandes usa lectura por bloques (chunked search).
+
         Parámetros
         ----------
-        max_size_mb : tamaño máximo del fichero a analizar (MB).
+        max_size_mb : umbral a partir del cual se activa chunked search (MB).
         """
         from pathlib import Path
         path = Path(file_path)
         size = path.stat().st_size
 
         if size > max_size_mb * 1024 * 1024:
-            raise ValueError(
-                f"Fichero demasiado grande ({size / 1e6:.1f} MB > {max_size_mb} MB). "
-                "Usa chunked search para ficheros grandes."
+            return self.search_file_chunked(
+                file_path, deduplicate=deduplicate
             )
 
         data = path.read_bytes()
