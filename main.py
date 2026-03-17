@@ -260,49 +260,68 @@ Ejemplos:
         """,
     )
 
-    # Opciones globales
-    parser.add_argument("--vt-key",   default="",    help="API key de VirusTotal v3")
-    parser.add_argument("--no-intel", action="store_true", help="Modo offline (sin consultas)")
-    parser.add_argument("--verbose",  action="store_true", help="Mostrar progreso detallado")
-    parser.add_argument("--output",   default="",    help="Guardar informe en JSON")
+    # Opciones globales — definidas tanto en el parser padre como en cada
+    # subparser para que funcionen antes o después del subcomando.
+    global_opts = {
+        "--vt-key":   dict(default="",    help="API key de VirusTotal v3"),
+        "--no-intel": dict(action="store_true", help="Modo offline (sin consultas)"),
+        "--verbose":  dict(action="store_true", help="Mostrar progreso detallado"),
+        "--output":   dict(default="",    help="Guardar informe en JSON"),
+    }
+
+    for flag, kw in global_opts.items():
+        parser.add_argument(flag, **kw)
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def _add_global(sub):
+        """Añade las opciones globales a un subparser."""
+        for flag, kw in global_opts.items():
+            sub.add_argument(flag, **kw)
 
     # analyze
     p_analyze = subparsers.add_parser("analyze", help="Pipeline de análisis completo")
     p_analyze.add_argument("file", help="Fichero a analizar")
+    _add_global(p_analyze)
 
     # hash
     p_hash = subparsers.add_parser("hash", help="Hashes + threat intelligence")
     p_hash.add_argument("file", help="Fichero a analizar")
+    _add_global(p_hash)
 
     # entropy
     p_entropy = subparsers.add_parser("entropy", help="Análisis de entropía")
     p_entropy.add_argument("file", help="Fichero a analizar")
+    _add_global(p_entropy)
 
     # pe
     p_pe = subparsers.add_parser("pe", help="Metadatos PE")
     p_pe.add_argument("file", help="Fichero PE a analizar")
+    _add_global(p_pe)
 
     # packer
     p_packer = subparsers.add_parser("packer", help="Detección de packer")
     p_packer.add_argument("file", help="Fichero a analizar")
+    _add_global(p_packer)
 
     # strings
     p_strings = subparsers.add_parser("strings", help="Búsqueda de strings (Aho-Corasick)")
     p_strings.add_argument("file", help="Fichero a analizar")
     p_strings.add_argument("--all", action="store_true", help="No deduplicar (todas las ocurrencias)")
+    _add_global(p_strings)
 
     # memdump
     p_memdump = subparsers.add_parser("memdump", help="Análisis de volcado de memoria")
     p_memdump.add_argument("file", help="Fichero de dump")
     p_memdump.add_argument("--extract-pes", default="", metavar="DIR",
                            help="Directorio para extraer PEs incrustados")
+    _add_global(p_memdump)
 
     # monitor
     p_monitor = subparsers.add_parser("monitor", help="Monitoreo de árbol de procesos (BFS)")
     p_monitor.add_argument("--pid",      type=int, default=0, help="PID a monitorizar (0=sistema)")
     p_monitor.add_argument("--duration", type=int, default=30, help="Segundos de monitoreo")
+    _add_global(p_monitor)
 
     # network
     p_network = subparsers.add_parser("network", help="Monitoreo de red")
@@ -310,6 +329,7 @@ Ejemplos:
     p_network.add_argument("--capture",   action="store_true",     help="Capturar con tcpdump")
     p_network.add_argument("--interface", default="eth0",          help="Interfaz de red")
     p_network.add_argument("--duration",  type=int, default=30,    help="Segundos de captura")
+    _add_global(p_network)
 
     return parser
 
