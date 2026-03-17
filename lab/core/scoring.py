@@ -37,6 +37,8 @@ Uso
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .file_type import FileType, COMPRESSED_FORMATS, PE_ONLY_FORMATS
+
 
 # ---------------------------------------------------------------------------
 # Niveles de riesgo
@@ -100,6 +102,19 @@ class ScoringReport:
 # Scorer principal
 # ---------------------------------------------------------------------------
 
+def _discount(
+    contributions: list[ScoreContribution],
+    source_prefix: str,
+    factor: float,
+) -> None:
+    """Aplica un factor de descuento a contribuciones cuyo source empiece con *source_prefix*."""
+    for c in contributions:
+        if c.source.startswith(source_prefix):
+            original = c.points
+            c.points = round(original * factor)
+            c.reason += f" [ajustado ×{factor} por formato]"
+
+
 class AnomalyScorer:
     """
     Combina resultados de análisis estático en un score de maliciosidad.
@@ -115,6 +130,7 @@ class AnomalyScorer:
         entropy_report=None,
         string_report=None,
         packer_report=None,
+        file_type: str | FileType = FileType.UNKNOWN,
     ) -> ScoringReport:
         """
         Calcula el score de anomalía combinando todos los reportes.
@@ -277,6 +293,32 @@ class AnomalyScorer:
                     f"Packer complejo ({', '.join(packer_names)}): "
                     "usar análisis dinámico en sandbox."
                 )
+
+        # ------------------------------------------------------------------
+        # Ajuste post-scoring por tipo de archivo
+        # ------------------------------------------------------------------
+        ft = FileType(file_type) if isinstance(file_type, str) else file_type
+
+        if ft not in PE_ONLY_FORMATS and ft != FileType.UNKNOWN:
+            # Entropía: formatos comprimidos → reducir contribución a 20 %
+            if ft in COMPRESSED_FORMATS:
+                _discount(contributions, "Entropía", factor=0.2)
+
+            # Packer: en archivos no-PE las detecciones son poco fiables
+            _discount(contributions, "Packer detectado", factor=0.0)
+
+            # Strings: descontar genéricos en no-PE (mantener peso en PE)
+            _discount(contributions, "Strings sospechosos", factor=0.5)
+
+            # Recalcular total tras descuentos
+            total = sum(c.points for c in contributions)
+
+            # Nota explicativa
+            contributions.append(ScoreContribution(
+                source="Ajuste formato",
+                points=0,
+                reason=f"Tipo: {ft.value} — pesos ajustados (no es PE)",
+            ))
 
         # ------------------------------------------------------------------
         # Score final y recomendaciones generales
