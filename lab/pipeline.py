@@ -61,6 +61,7 @@ from .core.pe_analysis     import PEAnalyzer, PEReport
 from .core.packer_detector import PackerDetector, PackerReport
 from .core.string_search   import AhoCorasickSearcher, StringSearchReport
 from .core.scoring         import AnomalyScorer, ScoringReport
+from .core.file_type       import detect_file_type, FileType
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +81,8 @@ class PipelineResult:
     string_report:  Optional[StringSearchReport] = None
     scoring_report: Optional[ScoringReport]      = None
 
+    file_type:      str = "unknown"
+
     # Flags de control del flujo
     short_circuit:  bool = False    # True si el hash fue suficiente
     skip_static:    bool = False    # True si entropía alta y no desempaquetado
@@ -93,6 +96,7 @@ class PipelineResult:
             "║         MALWARE ANALYSIS LAB - INFORME           ║",
             "╚══════════════════════════════════════════════════╝",
             f"  Archivo: {self.file_path}",
+            f"  Tipo de archivo: {self.file_type}",
             f"  Tiempo de análisis: {self.analysis_time:.2f}s",
         ]
 
@@ -187,6 +191,13 @@ class MalwareAnalysisPipeline:
         def log(msg: str) -> None:
             if verbose:
                 print(f"  [pipeline] {msg}")
+
+        # ----------------------------------------------------------
+        # Detección de tipo de archivo
+        # ----------------------------------------------------------
+        file_type = detect_file_type(path)
+        result.file_type = file_type.value
+        log(f"Tipo de archivo detectado: {file_type.value}")
 
         # ----------------------------------------------------------
         # FASE 1: Hash + Threat Intelligence
@@ -296,6 +307,7 @@ class MalwareAnalysisPipeline:
                 entropy_report = result.entropy_report,
                 string_report  = result.string_report,
                 packer_report  = result.packer_report,
+                file_type      = file_type,
             )
         except Exception as exc:
             result.errors.append(f"Fase 6 (scoring): {exc}")
